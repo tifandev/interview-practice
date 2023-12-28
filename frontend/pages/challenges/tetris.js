@@ -72,6 +72,8 @@ const SHAPES = [O_SHAPE, I_SHAPE, S_SHAPE, Z_SHAPE, L_SHAPE, J_SHAPE, T_SHAPE]
 
 const COLORS = ['#FFD700', '#00CED1', '#FF4500', '#9400D3', '#32CD32', '#FFA500', '#8B0000']
 
+const SPEED = 500
+
 function getRandomColor() {
 	return COLORS[Math.floor(Math.random() * COLORS.length)]
 }
@@ -79,16 +81,17 @@ function getRandomColor() {
 export default function Tetris() {
 	const [game, setGame] = useState({
 		status: 'stopped',
-		tick: 0,
+		score: 0,
 		currentPiece: null,
 		board: DEFAULT_BOARD,
 	})
 
 	useEffect(() => {
 		function updateGame() {
-			if (game.status === 'stopped') {
+			if (game.status !== 'live') {
 				return
 			}
+
 			if (!game.currentPiece) {
 				spawnPiece()
 			} else {
@@ -96,7 +99,7 @@ export default function Tetris() {
 			}
 		}
 
-		const interval = setInterval(updateGame, 500)
+		const interval = setInterval(updateGame, SPEED)
 
 		return () => clearInterval(interval)
 	}, [game])
@@ -117,7 +120,10 @@ export default function Tetris() {
 					rotateCurrentPieceClockwise()
 					break
 				case 'Enter':
-					setGame((prev) => ({ ...prev, status: 'running' }))
+					setGame((prev) => ({
+						...prev,
+						status: 'live',
+					}))
 					break
 				default:
 					break
@@ -142,13 +148,25 @@ export default function Tetris() {
 			color: getRandomColor(),
 		}
 
-		for (let y = newPiece.y; y < newPiece.shape.length; y++) {
-			for (let x = newPiece.x; x < newPiece.shape[0].length + newPiece.x; x++) {
-				newBoard[y][x] = newPiece.shape[y][x - newPiece.x]
-			}
-		}
+		let hasCollision = checkCollision(game.board, newPiece, newPiece.x, newPiece.y)
 
-		setGame((prev) => ({ ...prev, board: newBoard, tick: prev.tick + 1, currentPiece: newPiece }))
+		if (hasCollision) {
+			/* game lost, resetting */
+			setGame({
+				status: 'lost',
+				score: 0,
+				currentPiece: null,
+				board: DEFAULT_BOARD.map((y) => y.map(() => 0)),
+			})
+		} else {
+			for (let y = newPiece.y; y < newPiece.shape.length; y++) {
+				for (let x = newPiece.x; x < newPiece.shape[0].length + newPiece.x; x++) {
+					newBoard[y][x] = newPiece.shape[y][x - newPiece.x]
+				}
+			}
+
+			setGame((prev) => ({ ...prev, board: newBoard, currentPiece: newPiece }))
+		}
 	}
 
 	function shiftCurrentPieceDown() {
@@ -161,13 +179,15 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, y: game.currentPiece.y + 1 }
 
-		/* check if next y pos is out of bounds  */
-		if (
-			newPiece.y + newPiece.shape.length >
-			newBoard.length
-			// ||
-			// newBoard[newPiece.y + newPiece.shape.length - 1]?.[0]
-		) {
+		let hasCollision = checkCollision(
+			game.board,
+			game.currentPiece,
+			game.currentPiece.x,
+			game.currentPiece.y + 1
+		)
+
+		/* check if next y pos is out of bounds or has collision  */
+		if (newPiece.y + newPiece.shape.length > newBoard.length || hasCollision) {
 			newPiece.y = newPiece.y - 1
 
 			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
@@ -177,6 +197,11 @@ export default function Tetris() {
 					}
 				}
 			}
+
+			/* Delete complete rows and add score */
+			let completedRows = 0
+			let tetrisCount = 0
+			let tetris = 0
 
 			for (let y = 0; y < newBoard.length; y++) {
 				let completedCells = 0
@@ -188,15 +213,27 @@ export default function Tetris() {
 				}
 
 				if (completedCells === 10) {
+					completedRows++
+					tetrisCount++
 					newBoard.splice(y, 1)
 					newBoard.unshift([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+					if (tetrisCount === 4) {
+						completedRows = completedRows - 4
+						tetris++
+						tetrisCount = 0
+					}
+				} else {
+					tetrisCount = 0
 				}
 			}
 
+			/* individual rows award 10 points and a tetris awards 80 points */
+
 			setGame((prev) => ({
 				...prev,
+				score: prev.score + completedRows * 10 + tetris * 80,
 				board: newBoard,
-				tick: prev.tick + 1,
 				currentPiece: null,
 			}))
 		} else {
@@ -220,7 +257,6 @@ export default function Tetris() {
 			setGame((prev) => ({
 				...prev,
 				board: newBoard,
-				tick: prev.tick + 1,
 				currentPiece: newPiece,
 			}))
 		}
@@ -236,8 +272,15 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, x: game.currentPiece.x + 1 }
 
+		let hasCollision = checkCollision(
+			game.board,
+			game.currentPiece,
+			game.currentPiece.x + 1,
+			game.currentPiece.y
+		)
+
 		/* check if next y pos is out of bounds  */
-		if (newPiece.x + newPiece.shape[0].length > newBoard[0].length) {
+		if (newPiece.x + newPiece.shape[0].length > newBoard[0].length || hasCollision) {
 			return
 		} else {
 			/* release left side blocks */
@@ -258,7 +301,6 @@ export default function Tetris() {
 			setGame((prev) => ({
 				...prev,
 				board: newBoard,
-				tick: prev.tick + 1,
 				currentPiece: newPiece,
 			}))
 		}
@@ -274,8 +316,15 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, x: game.currentPiece.x - 1 }
 
+		let hasCollision = checkCollision(
+			game.board,
+			game.currentPiece,
+			game.currentPiece.x - 1,
+			game.currentPiece.y
+		)
+
 		/* check if next y pos is out of bounds  */
-		if (newPiece.x < 0) {
+		if (newPiece.x < 0 || hasCollision) {
 			return
 		} else {
 			/* release right side blocks */
@@ -296,7 +345,6 @@ export default function Tetris() {
 			setGame((prev) => ({
 				...prev,
 				board: newBoard,
-				tick: prev.tick + 1,
 				currentPiece: newPiece,
 			}))
 		}
@@ -318,11 +366,14 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, shape: rotatedPiece }
 
+		let hasCollision = checkCollision(game.board, newPiece, newPiece.x, newPiece.y)
+
 		/* check if out of bounds  */
 		if (
 			newPiece.y + newPiece.shape.length > newBoard.length ||
 			newPiece.x < 0 ||
-			newPiece.x + newPiece.shape[0].length > newBoard[0].length
+			newPiece.x + newPiece.shape[0].length > newBoard[0].length ||
+			hasCollision
 		) {
 			return
 		} else {
@@ -354,10 +405,21 @@ export default function Tetris() {
 			setGame((prev) => ({
 				...prev,
 				board: newBoard,
-				tick: prev.tick + 1,
 				currentPiece: newPiece,
 			}))
 		}
+	}
+
+	function checkCollision(board, piece, posX, posY) {
+		for (let y = 0; y < piece.shape.length; y++) {
+			for (let x = 0; x < piece.shape[y].length; x++) {
+				if (piece.shape[y][x] === 1 && (board[posY + y] && board[posY + y][posX + x]) === 2) {
+					return true
+				}
+			}
+		}
+
+		return false
 	}
 
 	return (
@@ -368,50 +430,59 @@ export default function Tetris() {
 				display: 'grid',
 				alignContent: 'center',
 				justifyContent: 'center',
-				gridTemplateColumns: '1fr 1fr',
 			}}
-			// onKeyDown={handleKeyDown}
 		>
-			{game.status === 'stopped' ? (
-				'Press enter to play'
+			{game.status !== 'live' ? (
+				<div style={{ textAlign: 'center' }}>
+					{game.status === 'lost' && <p style={{ color: 'red' }}>You lost</p>}
+					<p>Press enter to play</p>
+				</div>
 			) : (
-				<div
-					id='board'
-					style={{
-						height: '600px',
-						width: '300px',
-						border: 'gray solid 1px',
-					}}
-				>
-					{game.board.map((row, rowIndex) => (
-						<div
-							id={'row-' + rowIndex}
-							key={'row-' + rowIndex}
-							style={{ display: 'flex', height: '30px', width: '100%' }}
-						>
-							{row.map((cell, cellIndex) => (
-								<div
-									id={'cell-' + cellIndex}
-									key={'cell-' + cellIndex}
-									style={{
-										height: '30px',
-										width: '30px',
-										backgroundColor:
-											cell === 1 ? game.currentPiece.color : cell === 2 ? 'darkslategray' : 'white',
-										outline: 'gray solid 0.5px',
-										textAlign: 'center',
-									}}
-								>
-									{/* {cell} */}
-								</div>
-							))}
-						</div>
-					))}
+				<div>
+					<p>Score: {game.score}</p>
+					<div
+						id='board'
+						style={{
+							height: '600px',
+							width: '300px',
+							border: 'gray solid 1px',
+						}}
+					>
+						{game.board.map((row, rowIndex) => (
+							<div
+								id={'row-' + rowIndex}
+								key={'row-' + rowIndex}
+								style={{ display: 'flex', height: '30px', width: '100%' }}
+							>
+								{row.map((cell, cellIndex) => (
+									<div
+										id={'cell-' + cellIndex}
+										key={'cell-' + cellIndex}
+										style={{
+											height: '30px',
+											width: '30px',
+											backgroundColor:
+												cell === 1
+													? game?.currentPiece?.color
+													: cell === 2
+													? 'darkslategray'
+													: 'white',
+											outline: 'gray solid 0.5px',
+											textAlign: 'center',
+										}}
+									>
+										{/* {cell} */}
+									</div>
+								))}
+							</div>
+						))}
+					</div>
 				</div>
 			)}
-			<div>
+
+			{/* <div>
 				<div>{JSON.stringify(game)}</div>
-			</div>
+			</div> */}
 		</div>
 	)
 }
