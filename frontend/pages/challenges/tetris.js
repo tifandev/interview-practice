@@ -1,12 +1,11 @@
 /* Game board size: 10x20
  * Shapes: O, I, S, Z, L, J, T
  * User controls: left, right, down and rotation
- *
  */
 
 import { useState, useEffect } from 'react'
 
-const DEFAULT_BOARD = [
+const INITIAL_BOARD = [
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -83,7 +82,7 @@ export default function Tetris() {
 		status: 'stopped',
 		score: 0,
 		currentPiece: null,
-		board: DEFAULT_BOARD,
+		board: INITIAL_BOARD,
 	})
 
 	useEffect(() => {
@@ -156,7 +155,7 @@ export default function Tetris() {
 				status: 'lost',
 				score: 0,
 				currentPiece: null,
-				board: DEFAULT_BOARD.map((y) => y.map(() => 0)),
+				board: INITIAL_BOARD.map((y) => y.map(() => 0)),
 			})
 		} else {
 			for (let y = newPiece.y; y < newPiece.shape.length; y++) {
@@ -279,7 +278,7 @@ export default function Tetris() {
 			game.currentPiece.y
 		)
 
-		/* check if next y pos is out of bounds  */
+		/* check if next y pos is out of bounds or has collision  */
 		if (newPiece.x + newPiece.shape[0].length > newBoard[0].length || hasCollision) {
 			return
 		} else {
@@ -323,7 +322,7 @@ export default function Tetris() {
 			game.currentPiece.y
 		)
 
-		/* check if next y pos is out of bounds  */
+		/* check if next y pos is out of bounds or collision  */
 		if (newPiece.x < 0 || hasCollision) {
 			return
 		} else {
@@ -368,7 +367,7 @@ export default function Tetris() {
 
 		let hasCollision = checkCollision(game.board, newPiece, newPiece.x, newPiece.y)
 
-		/* check if out of bounds  */
+		/* check if out of bounds or collision  */
 		if (
 			newPiece.y + newPiece.shape.length > newBoard.length ||
 			newPiece.x < 0 ||
