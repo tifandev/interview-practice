@@ -1,9 +1,7 @@
-/* Game board size: 10x20
- * Shapes: O, I, S, Z, L, J, T
- * User controls: left, right, down and rotation
- */
-
-import { useState, useEffect } from 'react'
+import { Environment, OrbitControls, RoundedBox, Text3D } from '@react-three/drei'
+import { Canvas } from '@react-three/fiber'
+import { Bloom, EffectComposer } from '@react-three/postprocessing'
+import { useEffect, useRef, useState } from 'react'
 
 const INITIAL_BOARD = [
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -71,15 +69,23 @@ const SHAPES = [O_SHAPE, I_SHAPE, S_SHAPE, Z_SHAPE, L_SHAPE, J_SHAPE, T_SHAPE]
 
 const COLORS = ['#FFD700', '#00CED1', '#FF4500', '#9400D3', '#32CD32', '#FFA500', '#8B0000']
 
-const SPEED = 500
+const SPEED = 400
+
+const STATUS = {
+	PLAYING: 'playing',
+	STOPPED: 'stopped',
+	GAMEOVER: 'game-over',
+}
 
 function getRandomColor() {
 	return COLORS[Math.floor(Math.random() * COLORS.length)]
 }
 
 export default function Tetris() {
+	const boardRef = useRef()
+
 	const [game, setGame] = useState({
-		status: 'stopped',
+		status: STATUS.STOPPED,
 		score: 0,
 		currentPiece: null,
 		board: INITIAL_BOARD,
@@ -87,7 +93,7 @@ export default function Tetris() {
 
 	useEffect(() => {
 		function updateGame() {
-			if (game.status !== 'live') {
+			if (game.status !== STATUS.PLAYING) {
 				return
 			}
 
@@ -121,7 +127,7 @@ export default function Tetris() {
 				case 'Enter':
 					setGame((prev) => ({
 						...prev,
-						status: 'live',
+						status: STATUS.PLAYING,
 					}))
 					break
 				default:
@@ -152,7 +158,7 @@ export default function Tetris() {
 		if (hasCollision) {
 			/* game lost, resetting */
 			setGame({
-				status: 'lost',
+				status: STATUS.GAMEOVER,
 				score: 0,
 				currentPiece: null,
 				board: INITIAL_BOARD.map((y) => y.map(() => 0)),
@@ -422,66 +428,132 @@ export default function Tetris() {
 	}
 
 	return (
-		<div
-			id='container'
-			style={{
-				height: '100vh',
-				display: 'grid',
-				alignContent: 'center',
-				justifyContent: 'center',
-			}}
-		>
-			{game.status !== 'live' ? (
-				<div style={{ textAlign: 'center' }}>
-					{game.status === 'lost' && <p style={{ color: 'red' }}>You lost</p>}
-					<p>Press enter to play</p>
-				</div>
-			) : (
-				<div>
-					<p>Score: {game.score}</p>
-					<div
-						id='board'
-						style={{
-							height: '600px',
-							width: '300px',
-							border: 'gray solid 1px',
-						}}
-					>
-						{game.board.map((row, rowIndex) => (
-							<div
-								id={'row-' + rowIndex}
-								key={'row-' + rowIndex}
-								style={{ display: 'flex', height: '30px', width: '100%' }}
-							>
-								{row.map((cell, cellIndex) => (
-									<div
-										id={'cell-' + cellIndex}
-										key={'cell-' + cellIndex}
-										style={{
-											height: '30px',
-											width: '30px',
-											backgroundColor:
-												cell === 1
-													? game?.currentPiece?.color
-													: cell === 2
-													? 'darkslategray'
-													: 'white',
-											outline: 'gray solid 0.5px',
-											textAlign: 'center',
-										}}
-									>
-										{/* {cell} */}
-									</div>
-								))}
-							</div>
-						))}
-					</div>
-				</div>
-			)}
+		<div id='container'>
+			<Canvas
+				camera={{
+					position: [0, 0, 22],
+					fov: 60,
+					near: 0.1,
+					far: 100,
+				}}
+				shadows
+				style={{ height: '100vh', widows: '100%' }}
+			>
+				<OrbitControls />
 
-			{/* <div>
-				<div>{JSON.stringify(game)}</div>
-			</div> */}
+				<Environment preset='dawn' background blur={1} />
+
+				<EffectComposer disableNormalPass>
+					<Bloom mipmapBlur luminanceThreshold={1} intensity={0.2} />
+				</EffectComposer>
+
+				{game.status !== STATUS.PLAYING && (
+					<>
+						{game.status === STATUS.GAMEOVER && (
+							<Text3D
+								position={[-5, 2, 4]}
+								bevelEnabled
+								bevelSize={0.04}
+								bevelThickness={0.1}
+								size={1.5}
+								font='/Inter_Bold.json'
+							>
+								{`Game Over`}
+								<meshStandardMaterial
+									metalness={1}
+									roughness={0.3}
+									flatShading={false}
+									receiveShadow
+									color='red'
+								/>
+							</Text3D>
+						)}
+						<Text3D
+							position={[-9, 0, 4]}
+							bevelEnabled
+							bevelSize={0.04}
+							bevelThickness={0.1}
+							size={1.5}
+							font='/Inter_Bold.json'
+						>
+							{`Press Enter to Play`}
+							<meshStandardMaterial
+								metalness={1}
+								roughness={0.3}
+								flatShading={false}
+								receiveShadow
+								color='white'
+							/>
+						</Text3D>
+					</>
+				)}
+
+				<Text3D
+					position={[-14, 10, 0]}
+					bevelEnabled
+					bevelSize={0.04}
+					bevelThickness={0.1}
+					size={0.9}
+					font='/Inter_Bold.json'
+				>
+					{`Score ${game.score}`}
+					<meshNormalMaterial />
+				</Text3D>
+
+				<group position={[0, -10, 0]}>
+					{Array(12)
+						.fill(1)
+						.map((_, i) =>
+							Array(22)
+								.fill(1)
+								.map((_, j) => {
+									if (j === 0 || j === 21 || i === 0 || i === 11) {
+										return (
+											<Block
+												key={`${i}-${j}`}
+												position={[i - 5.5, -j + 21, 0]}
+												color={'#448'}
+												isVisible
+											/>
+										)
+									}
+								})
+						)}
+
+					{game.board.map((row, rowIndex) =>
+						row.map((cell, cellIndex) => (
+							<Block
+								key={`${rowIndex}-${cellIndex}`}
+								position={[cellIndex - 4.5, -rowIndex + 20, 0]}
+								color={cell === 1 ? game?.currentPiece?.color : cell === 2 ? 'gray' : 'gray'}
+								isVisible={cell !== 0}
+							/>
+						))
+					)}
+				</group>
+			</Canvas>
 		</div>
 	)
+}
+
+function Block({ position, color, isVisible, scale }) {
+	return isVisible ? (
+		<RoundedBox
+			castShadow
+			receiveShadow
+			radius={0.12}
+			smoothness={1}
+			position={position}
+			args={[1, 1, 1]}
+		>
+			<meshStandardMaterial
+				attach='material'
+				color={color}
+				metalness={1}
+				roughness={0.3}
+				flatShading={false}
+				receiveShadow
+			/>
+		</RoundedBox>
+	) : null
 }
