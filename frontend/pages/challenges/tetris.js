@@ -1,7 +1,7 @@
-import { Environment, OrbitControls, RoundedBox, Text3D } from '@react-three/drei'
-import { Canvas } from '@react-three/fiber'
+import { Loader, OrbitControls, Outlines, RoundedBox, Stars, Text3D } from '@react-three/drei'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 
 const INITIAL_BOARD = [
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -65,9 +65,9 @@ const T_SHAPE = [
 	[0, 1, 0],
 ]
 
-const SHAPES = [O_SHAPE, I_SHAPE, S_SHAPE, Z_SHAPE, L_SHAPE, J_SHAPE, T_SHAPE]
+const SHAPES = [I_SHAPE, J_SHAPE, L_SHAPE, O_SHAPE, S_SHAPE, T_SHAPE, Z_SHAPE]
 
-const COLORS = ['#FFD700', '#00CED1', '#FF4500', '#9400D3', '#32CD32', '#FFA500', '#8B0000']
+const COLORS = ['#00ffff', '#0000ff', '#ff7f00', '#ffff00', '#00ff00', '#800080', '#ff0000']
 
 const SPEED = 400
 
@@ -77,19 +77,15 @@ const STATUS = {
 	GAMEOVER: 'game-over',
 }
 
-function getRandomColor() {
-	return COLORS[Math.floor(Math.random() * COLORS.length)]
-}
-
 export default function Tetris() {
-	const boardRef = useRef()
-
 	const [game, setGame] = useState({
 		status: STATUS.STOPPED,
 		score: 0,
 		currentPiece: null,
 		board: INITIAL_BOARD,
 	})
+
+	const musicRef = useRef()
 
 	useEffect(() => {
 		function updateGame() {
@@ -125,6 +121,8 @@ export default function Tetris() {
 					rotateCurrentPieceClockwise()
 					break
 				case 'Enter':
+					musicRef.current.play()
+
 					setGame((prev) => ({
 						...prev,
 						status: STATUS.PLAYING,
@@ -145,18 +143,23 @@ export default function Tetris() {
 	function spawnPiece() {
 		console.log('new piece')
 
+		const randomIndex = Math.floor(Math.random() * SHAPES.length)
+
 		const newBoard = game.board
 		const newPiece = {
 			x: 4,
 			y: 0,
-			shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
-			color: getRandomColor(),
+			shape: SHAPES[randomIndex],
+			color: COLORS[randomIndex],
 		}
 
 		let hasCollision = checkCollision(game.board, newPiece, newPiece.x, newPiece.y)
 
 		if (hasCollision) {
 			/* game lost, resetting */
+			musicRef.current.pause()
+			musicRef.current.currentTime = 0
+
 			setGame({
 				status: STATUS.GAMEOVER,
 				score: 0,
@@ -429,131 +432,163 @@ export default function Tetris() {
 
 	return (
 		<div id='container'>
+			<audio ref={musicRef} autoPlay loop src='/music.mp3' />
+
 			<Canvas
-				camera={{
-					position: [0, 0, 22],
-					fov: 60,
-					near: 0.1,
-					far: 100,
-				}}
-				shadows
 				style={{ height: '100vh', widows: '100%' }}
+				shadows
+				camera={{
+					position: [0, 0, 2],
+					fov: 60,
+				}}
+				gl={{ alpha: false, antialias: false }}
 			>
-				<OrbitControls />
+				<Suspense fallback={'Loading'}>
+					<OrbitControls
+						enableZoom={false}
+						maxPolarAngle={2}
+						minPolarAngle={1}
+						maxAzimuthAngle={Math.PI / 4}
+						minAzimuthAngle={-Math.PI / 4}
+					/>
 
-				<Environment preset='dawn' background blur={1} />
+					{/* <OrthographicCamera makeDefault position={new THREE.Vector3(0, 0, 30)} zoom={30} /> */}
+					<color args={['#000']} attach='background' />
+					<Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={2} />
 
-				<EffectComposer disableNormalPass>
-					<Bloom mipmapBlur luminanceThreshold={1} intensity={0.2} />
-				</EffectComposer>
+					<directionalLight position={[50, 30, 100]} intensity={6} color='#fff' />
 
-				{game.status !== STATUS.PLAYING && (
-					<>
-						{game.status === STATUS.GAMEOVER && (
-							<Text3D
-								position={[-5, 2, 4]}
-								bevelEnabled
-								bevelSize={0.04}
-								bevelThickness={0.1}
-								size={1.5}
-								font='/Inter_Bold.json'
-							>
-								{`Game Over`}
-								<meshStandardMaterial
-									metalness={1}
-									roughness={0.3}
-									flatShading={false}
-									receiveShadow
-									color='red'
-								/>
-							</Text3D>
-						)}
-						<Text3D
-							position={[-9, 0, 4]}
-							bevelEnabled
-							bevelSize={0.04}
-							bevelThickness={0.1}
-							size={1.5}
-							font='/Inter_Bold.json'
-						>
-							{`Press Enter to Play`}
-							<meshStandardMaterial
-								metalness={1}
-								roughness={0.3}
-								flatShading={false}
-								receiveShadow
-								color='white'
-							/>
-						</Text3D>
-					</>
-				)}
+					<EffectComposer>
+						<Bloom mipmapBlur luminanceThreshold={0.3} luminanceSmoothing={18} strength={0.1} />
+					</EffectComposer>
 
-				<Text3D
-					position={[-14, 10, 0]}
-					bevelEnabled
-					bevelSize={0.04}
-					bevelThickness={0.1}
-					size={0.9}
-					font='/Inter_Bold.json'
-				>
-					{`Score ${game.score}`}
-					<meshNormalMaterial />
-				</Text3D>
+					<GameHud game={game} />
 
-				<group position={[0, -10, 0]}>
-					{Array(12)
-						.fill(1)
-						.map((_, i) =>
-							Array(22)
+					<group position={[0, -10.5, -18]}>
+						{/* Borders */}
+						<group>
+							{Array(12)
 								.fill(1)
-								.map((_, j) => {
-									if (j === 0 || j === 21 || i === 0 || i === 11) {
-										return (
-											<Block
-												key={`${i}-${j}`}
-												position={[i - 5.5, -j + 21, 0]}
-												color={'#448'}
-												isVisible
-											/>
-										)
-									}
-								})
-						)}
+								.map((_, i) =>
+									Array(22)
+										.fill(1)
+										.map((_, j) => {
+											if (j === 0 || j === 21 || i === 0 || i === 11) {
+												return (
+													<Block
+														key={`${i}-${j}`}
+														position={[i - 5.5, -j + 21, 0]}
+														color={'#448'}
+														isVisible
+													/>
+												)
+											}
+										})
+								)}
+						</group>
 
-					{game.board.map((row, rowIndex) =>
-						row.map((cell, cellIndex) => (
-							<Block
-								key={`${rowIndex}-${cellIndex}`}
-								position={[cellIndex - 4.5, -rowIndex + 20, 0]}
-								color={cell === 1 ? game?.currentPiece?.color : cell === 2 ? 'gray' : 'gray'}
-								isVisible={cell !== 0}
-							/>
-						))
-					)}
-				</group>
+						{/* Blocks */}
+						<group>
+							{game.board.map((row, rowIndex) =>
+								row.map((cell, cellIndex) => (
+									<Block
+										key={`${rowIndex}-${cellIndex}`}
+										position={[cellIndex - 4.5, -rowIndex + 20, 0]}
+										color={
+											cell === 1 ? game?.currentPiece?.color : cell === 2 ? '#7f7f7f' : '#7f7f7f'
+										}
+										isVisible={cell !== 0}
+									/>
+								))
+							)}
+						</group>
+					</group>
+				</Suspense>
 			</Canvas>
+			<Loader />
 		</div>
 	)
 }
 
-function Block({ position, color, isVisible, scale }) {
+function Block({ position, color, isVisible }) {
 	return isVisible ? (
 		<RoundedBox
 			castShadow
 			receiveShadow
-			radius={0.12}
-			smoothness={1}
+			radius={0.2}
+			smoothness={0.0001}
 			position={position}
 			args={[1, 1, 1]}
 		>
-			<meshStandardMaterial
+			<meshPhysicalMaterial
 				attach='material'
 				color={color}
 				metalness={1}
-				roughness={0.3}
-				flatShading={false}
-				receiveShadow
+				roughness={0.2}
+				clearcoat={0.1}
+				clearcoatRoughness={0.5}
 			/>
+
+			<Outlines thickness={0.01} color={color} />
 		</RoundedBox>
 	) : null
+}
+
+function GameHud({ game }) {
+	const position = [0, 0, -2]
+	const { camera } = useThree()
+
+	const [props, setProps] = useState({
+		position: position,
+		rotation: [0, 0, 0],
+	})
+
+	useEffect(() => {
+		if (game.status === STATUS.PLAYING) {
+			camera.position.set(0, 0, 2)
+		}
+	}, [game.status])
+
+	useFrame(() => {
+		const { x, y, z } = camera.position
+		const { x: rotX, y: rotY, z: rotZ } = camera.rotation
+		setProps({ position: [x, y, z], rotation: [rotX, rotY, rotZ] })
+	})
+
+	return (
+		<group position={props.position}>
+			<group rotation={props.rotation}>
+				<group position={position}>
+					{game.status !== STATUS.PLAYING && (
+						<>
+							{game.status === STATUS.GAMEOVER && (
+								<Text3D position={[-1.8, 1, -5]} size={0.6} font='/font.json'>
+									{`Game Over`}
+									<meshPhongMaterial emissive={'#ff00ff'} emissiveIntensity={8} />
+								</Text3D>
+							)}
+							<Text3D position={[-1.5, 0, -5]} size={0.5} font='/font.json'>
+								{`Press Enter \n     to Play`}
+								<meshPhongMaterial emissive={'#00ffff'} emissiveIntensity={4} />
+							</Text3D>
+						</>
+					)}
+
+					{game.status !== STATUS.STOPPED && (
+						<Text3D
+							anchorX='center'
+							anchorY='middle'
+							rotation={[0, (20 * Math.PI) / 180, 0]}
+							position={[-6, 2.5, -5]}
+							size={0.5}
+							font='/font.json'
+						>
+							{`Score ${game.score}`}
+							<meshPhongMaterial emissive={'#ffff00'} emissiveIntensity={4} />
+						</Text3D>
+					)}
+				</group>
+			</group>
+		</group>
+	)
 }
