@@ -1,30 +1,20 @@
-import { Loader, OrbitControls, Outlines, RoundedBox, Stars, Text3D } from '@react-three/drei'
+import {
+	OrthographicCamera,
+	PerspectiveCamera,
+	Loader,
+	OrbitControls,
+	Outlines,
+	Box,
+	RoundedBox,
+	Stars,
+	Text3D,
+} from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import { Suspense, useEffect, useRef, useState } from 'react'
+import * as THREE from 'three'
 
-const INITIAL_BOARD = [
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-]
+const INITIAL_BOARD = Array.from({ length: 20 }, () => Array(10).fill(0))
 
 const O_SHAPE = [
 	[1, 1],
@@ -69,7 +59,7 @@ const SHAPES = [I_SHAPE, J_SHAPE, L_SHAPE, O_SHAPE, S_SHAPE, T_SHAPE, Z_SHAPE]
 
 const COLORS = ['#00ffff', '#0000ff', '#ff7f00', '#ffff00', '#00ff00', '#800080', '#ff0000']
 
-const SPEED = 400
+const SPEED = 300
 
 const STATUS = {
 	PLAYING: 'playing',
@@ -84,6 +74,8 @@ export default function Tetris() {
 		currentPiece: null,
 		board: INITIAL_BOARD,
 	})
+
+	const [muted, setMuted] = useState(false)
 
 	const musicRef = useRef()
 
@@ -122,11 +114,15 @@ export default function Tetris() {
 					break
 				case 'Enter':
 					musicRef.current.play()
+					musicRef.current.volume = 0.25
 
 					setGame((prev) => ({
 						...prev,
 						status: STATUS.PLAYING,
 					}))
+					break
+				case 'm':
+					setMuted((prev) => !prev)
 					break
 				default:
 					break
@@ -167,11 +163,11 @@ export default function Tetris() {
 				board: INITIAL_BOARD.map((y) => y.map(() => 0)),
 			})
 		} else {
-			for (let y = newPiece.y; y < newPiece.shape.length; y++) {
-				for (let x = newPiece.x; x < newPiece.shape[0].length + newPiece.x; x++) {
-					newBoard[y][x] = newPiece.shape[y][x - newPiece.x]
-				}
-			}
+			console.log(newPiece)
+
+			drawShadow(newBoard, newPiece)
+
+			drawNewPiece(newBoard, newPiece)
 
 			setGame((prev) => ({ ...prev, board: newBoard, currentPiece: newPiece }))
 		}
@@ -187,12 +183,7 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, y: game.currentPiece.y + 1 }
 
-		let hasCollision = checkCollision(
-			game.board,
-			game.currentPiece,
-			game.currentPiece.x,
-			game.currentPiece.y + 1
-		)
+		let hasCollision = checkCollision(game.board, game.currentPiece, game.currentPiece.x, game.currentPiece.y + 1)
 
 		/* check if next y pos is out of bounds or has collision  */
 		if (newPiece.y + newPiece.shape.length > newBoard.length || hasCollision) {
@@ -206,61 +197,22 @@ export default function Tetris() {
 				}
 			}
 
-			/* Delete complete rows and add score */
-			let completedRows = 0
-			let tetrisCount = 0
-			let tetris = 0
-
-			for (let y = 0; y < newBoard.length; y++) {
-				let completedCells = 0
-
-				for (let x = 0; x < newBoard[y].length; x++) {
-					if (newBoard[y][x]) {
-						completedCells++
-					}
-				}
-
-				if (completedCells === 10) {
-					completedRows++
-					tetrisCount++
-					newBoard.splice(y, 1)
-					newBoard.unshift([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-
-					if (tetrisCount === 4) {
-						completedRows = completedRows - 4
-						tetris++
-						tetrisCount = 0
-					}
-				} else {
-					tetrisCount = 0
-				}
-			}
-
-			/* individual rows award 10 points and a tetris awards 80 points */
+			const newScore = checkForCompleteRowsAndCalculateScore(newBoard)
 
 			setGame((prev) => ({
 				...prev,
-				score: prev.score + completedRows * 10 + tetris * 80,
+				score: prev.score + newScore,
 				board: newBoard,
 				currentPiece: null,
 			}))
 		} else {
-			/* release upper blocks */
-			for (let y = newPiece.y - 1; y < newPiece.y; y++) {
-				for (let x = newPiece.x; x < newPiece.shape[0].length + newPiece.x; x++) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = 0
-					}
-				}
-			}
+			drawShadow(newBoard, newPiece)
 
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = newPiece.shape[y - newPiece.y][x - newPiece.x]
-					}
-				}
-			}
+			/* release upper blocks */
+			releaseBlocks(newBoard)
+
+			/* move piece down */
+			drawNewPiece(newBoard, newPiece)
 
 			setGame((prev) => ({
 				...prev,
@@ -280,31 +232,18 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, x: game.currentPiece.x + 1 }
 
-		let hasCollision = checkCollision(
-			game.board,
-			game.currentPiece,
-			game.currentPiece.x + 1,
-			game.currentPiece.y
-		)
+		let hasCollision = checkCollision(game.board, game.currentPiece, game.currentPiece.x + 1, game.currentPiece.y)
 
 		/* check if next y pos is out of bounds or has collision  */
 		if (newPiece.x + newPiece.shape[0].length > newBoard[0].length || hasCollision) {
 			return
 		} else {
-			/* release left side blocks */
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				if (newBoard[y][newPiece.x - 1] !== 2) {
-					newBoard[y][newPiece.x - 1] = 0
-				}
-			}
+			drawShadow(newBoard, newPiece)
 
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = newPiece.shape[y - newPiece.y][x - newPiece.x]
-					}
-				}
-			}
+			/* release left side blocks */
+			releaseBlocks(newBoard)
+
+			drawNewPiece(newBoard, newPiece)
 
 			setGame((prev) => ({
 				...prev,
@@ -324,31 +263,18 @@ export default function Tetris() {
 		const newBoard = game.board
 		const newPiece = { ...game.currentPiece, x: game.currentPiece.x - 1 }
 
-		let hasCollision = checkCollision(
-			game.board,
-			game.currentPiece,
-			game.currentPiece.x - 1,
-			game.currentPiece.y
-		)
+		let hasCollision = checkCollision(game.board, game.currentPiece, game.currentPiece.x - 1, game.currentPiece.y)
 
 		/* check if next y pos is out of bounds or collision  */
 		if (newPiece.x < 0 || hasCollision) {
 			return
 		} else {
-			/* release right side blocks */
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				if (newBoard[y][newPiece.x + newPiece.shape[0].length] !== 2) {
-					newBoard[y][newPiece.x + newPiece.shape[0].length] = 0
-				}
-			}
+			drawShadow(newBoard, newPiece)
 
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = newPiece.shape[y - newPiece.y][x - newPiece.x]
-					}
-				}
-			}
+			/* release right side blocks */
+			releaseBlocks(newBoard)
+
+			drawNewPiece(newBoard, newPiece)
 
 			setGame((prev) => ({
 				...prev,
@@ -365,9 +291,7 @@ export default function Tetris() {
 
 		console.log('rotating piece')
 
-		const tempMatrix = game.currentPiece.shape[0].map((col, i) =>
-			game.currentPiece.shape.map((row) => row[i])
-		)
+		const tempMatrix = game.currentPiece.shape[0].map((col, i) => game.currentPiece.shape.map((row) => row[i]))
 
 		const rotatedPiece = tempMatrix.map((row) => row.reverse())
 
@@ -385,30 +309,11 @@ export default function Tetris() {
 		) {
 			return
 		} else {
-			/* release unrotated blocks */
-			for (
-				let y = game.currentPiece.y;
-				y < game.currentPiece.y + game.currentPiece.shape.length;
-				y++
-			) {
-				for (
-					let x = game.currentPiece.x;
-					x < game.currentPiece.x + game.currentPiece.shape[0].length;
-					x++
-				) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = 0
-					}
-				}
-			}
+			drawShadow(newBoard, newPiece)
 
-			for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
-				for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
-					if (newBoard[y][x] !== 2) {
-						newBoard[y][x] = newPiece.shape[y - newPiece.y][x - newPiece.x]
-					}
-				}
-			}
+			releaseBlocks(newBoard)
+
+			drawNewPiece(newBoard, newPiece)
 
 			setGame((prev) => ({
 				...prev,
@@ -430,41 +335,129 @@ export default function Tetris() {
 		return false
 	}
 
+	function releaseBlocks(newBoard) {
+		for (let y = game.currentPiece.y; y < game.currentPiece.y + game.currentPiece.shape.length; y++) {
+			for (let x = game.currentPiece.x; x < game.currentPiece.x + game.currentPiece.shape[0].length; x++) {
+				if (newBoard[y][x] !== 2) {
+					newBoard[y][x] = 0
+				}
+			}
+		}
+	}
+
+	function drawNewPiece(newBoard, newPiece) {
+		for (let y = newPiece.y; y < newPiece.y + newPiece.shape.length; y++) {
+			for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
+				if (newBoard[y][x] !== 2) {
+					newBoard[y][x] = newPiece.shape[y - newPiece.y][x - newPiece.x]
+				}
+			}
+		}
+	}
+
+	function drawShadow(newBoard, newPiece) {
+		/* release shadow blocks */
+		for (let y = 0; y < newBoard.length; y++) {
+			for (let x = 0; x < newBoard[0].length; x++) {
+				if (newBoard[y][x] === -1) {
+					newBoard[y][x] = 0
+				}
+			}
+		}
+
+		/* draw shadow */
+		for (let i = 0; i < newBoard.length; i++) {
+			let hasCollision = checkCollision(
+				game.board,
+				game.currentPiece ? game.currentPiece : newPiece,
+				newPiece.x,
+				newPiece.y + i
+			)
+
+			if (newPiece.y + i + newPiece.shape.length > newBoard.length || hasCollision) {
+				i = i - 1
+
+				for (let y = newPiece.y + i; y < newPiece.y + i + newPiece.shape.length; y++) {
+					for (let x = newPiece.x; x < newPiece.x + newPiece.shape[0].length; x++) {
+						if (newBoard[y][x] !== 2 && newPiece.shape[y - newPiece.y - i][x - newPiece.x] === 1) {
+							newBoard[y][x] = -1
+						}
+					}
+				}
+				break
+			}
+		}
+	}
+
+	function checkForCompleteRowsAndCalculateScore(newBoard) {
+		/* Delete complete rows and add score */
+		let completedRows = 0
+		let tetrisCount = 0
+		let tetris = 0
+
+		for (let y = 0; y < newBoard.length; y++) {
+			let completedCells = 0
+
+			for (let x = 0; x < newBoard[y].length; x++) {
+				if (newBoard[y][x]) {
+					completedCells++
+				}
+			}
+
+			if (completedCells === 10) {
+				completedRows++
+				tetrisCount++
+				newBoard.splice(y, 1)
+				newBoard.unshift([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+
+				if (tetrisCount === 4) {
+					completedRows = completedRows - 4
+					tetris++
+					tetrisCount = 0
+				}
+			} else {
+				tetrisCount = 0
+			}
+		}
+
+		/* individual rows award 10 points and a tetris awards 80 points */
+		return completedRows * 10 + tetris * 80
+	}
+
 	return (
 		<div id='container'>
-			<audio ref={musicRef} autoPlay loop src='/music.mp3' />
+			<audio ref={musicRef} loop src='/music.mp3' muted={muted} />
 
-			<Canvas
-				style={{ height: '100vh', widows: '100%' }}
-				shadows
-				camera={{
-					position: [0, 0, 2],
-					fov: 60,
-				}}
-				gl={{ alpha: false, antialias: false }}
-			>
+			<Canvas style={{ height: '100vh', widows: '100%' }} shadows gl={{ alpha: false, antialias: false }}>
 				<Suspense fallback={'Loading'}>
-					<OrbitControls
-						enableZoom={false}
-						maxPolarAngle={2}
-						minPolarAngle={1}
-						maxAzimuthAngle={Math.PI / 4}
-						minAzimuthAngle={-Math.PI / 4}
+					{game.status === STATUS.PLAYING ? (
+						<OrthographicCamera makeDefault position={new THREE.Vector3(0, 0, 30)} zoom={33} />
+					) : (
+						<>
+							<PerspectiveCamera makeDefault position={[0, 0, 6]} fov={75} /> <OrbitControls maxDistance={100} />
+						</>
+					)}
+
+					<color args={['#000']} attach='background' />
+					<Stars
+						radius={game.status === STATUS.PLAYING ? 10 : 100}
+						depth={50}
+						count={5000}
+						factor={4}
+						saturation={0}
+						fade
+						speed={2}
 					/>
 
-					{/* <OrthographicCamera makeDefault position={new THREE.Vector3(0, 0, 30)} zoom={30} /> */}
-					<color args={['#000']} attach='background' />
-					<Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={2} />
-
-					<directionalLight position={[50, 30, 100]} intensity={6} color='#fff' />
+					<directionalLight position={[50, 55, 100]} intensity={7} color='#fff' />
 
 					<EffectComposer>
-						<Bloom mipmapBlur luminanceThreshold={0.3} luminanceSmoothing={18} strength={0.1} />
+						<Bloom mipmapBlur luminanceThreshold={0.1} luminanceSmoothing={18} strength={1} />
 					</EffectComposer>
 
-					<GameHud game={game} />
+					<GameHud game={game} muted={muted} />
 
-					<group position={[0, -10.5, -18]}>
+					<group position={[0, -10.5, -10]}>
 						{/* Borders */}
 						<group>
 							{Array(12)
@@ -474,14 +467,7 @@ export default function Tetris() {
 										.fill(1)
 										.map((_, j) => {
 											if (j === 0 || j === 21 || i === 0 || i === 11) {
-												return (
-													<Block
-														key={`${i}-${j}`}
-														position={[i - 5.5, -j + 21, 0]}
-														color={'#448'}
-														isVisible
-													/>
-												)
+												return <Block key={`${i}-${j}`} position={[i - 5.5, -j + 21, 0]} color={'#448'} isVisible />
 											}
 										})
 								)}
@@ -494,10 +480,9 @@ export default function Tetris() {
 									<Block
 										key={`${rowIndex}-${cellIndex}`}
 										position={[cellIndex - 4.5, -rowIndex + 20, 0]}
-										color={
-											cell === 1 ? game?.currentPiece?.color : cell === 2 ? '#7f7f7f' : '#7f7f7f'
-										}
+										color={Math.abs(cell) === 1 ? game?.currentPiece?.color : cell === 2 ? '#7f7f7f' : '#7f7f7f'}
 										isVisible={cell !== 0}
+										isShadow={cell === -1}
 									/>
 								))
 							)}
@@ -510,31 +495,36 @@ export default function Tetris() {
 	)
 }
 
-function Block({ position, color, isVisible }) {
-	return isVisible ? (
-		<RoundedBox
-			castShadow
-			receiveShadow
-			radius={0.2}
-			smoothness={0.0001}
-			position={position}
-			args={[1, 1, 1]}
-		>
-			<meshPhysicalMaterial
-				attach='material'
-				color={color}
-				metalness={1}
-				roughness={0.2}
-				clearcoat={0.1}
-				clearcoatRoughness={0.5}
-			/>
+function Block({ position, color, isVisible, isShadow }) {
+	if (isShadow) {
+		return (
+			<RoundedBox position={position} args={[1, 1, 1]}>
+				<meshPhongMaterial wireframe color={color} emissive={color} emissiveIntensity={1} />
+			</RoundedBox>
+		)
+	}
 
-			<Outlines thickness={0.01} color={color} />
-		</RoundedBox>
+	return isVisible ? (
+		<>
+			<RoundedBox castShadow receiveShadow radius={0.2} smoothness={0.0001} position={position} args={[1, 1, 1]}>
+				<meshPhysicalMaterial
+					attach='material'
+					color={color}
+					metalness={1}
+					roughness={0.2}
+					clearcoat={0.1}
+					clearcoatRoughness={0.5}
+				/>
+			</RoundedBox>
+			{/* <Outlines thickness={0.01} color={color} /> */}
+			<RoundedBox position={position} args={[0.95, 0.95, 0.95]}>
+				<meshPhongMaterial color={color} emissive={color} emissiveIntensity={1} />
+			</RoundedBox>
+		</>
 	) : null
 }
 
-function GameHud({ game }) {
+function GameHud({ game, muted }) {
 	const position = [0, 0, -2]
 	const { camera } = useThree()
 
@@ -562,30 +552,43 @@ function GameHud({ game }) {
 					{game.status !== STATUS.PLAYING && (
 						<>
 							{game.status === STATUS.GAMEOVER && (
-								<Text3D position={[-1.8, 1, -5]} size={0.6} font='/font.json'>
+								<Text3D position={[-3, 3, -6]} size={1} font='/font.json'>
 									{`Game Over`}
-									<meshPhongMaterial emissive={'#ff00ff'} emissiveIntensity={8} />
+									<meshPhongMaterial emissive={'#ff00ff'} emissiveIntensity={9} />
 								</Text3D>
 							)}
-							<Text3D position={[-1.5, 0, -5]} size={0.5} font='/font.json'>
+							<Text3D position={[-3, 0, -6]} size={1} font='/font.json'>
 								{`Press Enter \n     to Play`}
-								<meshPhongMaterial emissive={'#00ffff'} emissiveIntensity={4} />
+								<meshPhongMaterial emissive={'#00ffff'} emissiveIntensity={5} />
 							</Text3D>
 						</>
 					)}
 
 					{game.status !== STATUS.STOPPED && (
-						<Text3D
-							anchorX='center'
-							anchorY='middle'
-							rotation={[0, (20 * Math.PI) / 180, 0]}
-							position={[-6, 2.5, -5]}
-							size={0.5}
-							font='/font.json'
-						>
-							{`Score ${game.score}`}
-							<meshPhongMaterial emissive={'#ffff00'} emissiveIntensity={4} />
-						</Text3D>
+						<>
+							<Text3D
+								position={[-19.5, 9.5, 0]}
+								size={1.2}
+								anchorX='center'
+								anchorY='middle'
+								rotation={[0, (20 * Math.PI) / 180, 0]}
+								font='/font.json'
+							>
+								{`Score:  ${game.score}`}
+								<meshPhongMaterial emissive={'#ffff00'} emissiveIntensity={5} />
+							</Text3D>
+							<Text3D
+								position={[-19.5, -10.5, 0]}
+								size={1.2}
+								anchorX='center'
+								anchorY='middle'
+								rotation={[0, (20 * Math.PI) / 180, 0]}
+								font='/font.json'
+							>
+								{`Press M to ${muted ? 'unmute' : 'mute'}`}
+								<meshPhongMaterial emissive={'#ffff00'} emissiveIntensity={5} />
+							</Text3D>
+						</>
 					)}
 				</group>
 			</group>
