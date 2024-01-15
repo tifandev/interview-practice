@@ -77,6 +77,9 @@ export default function Tetris() {
 
 	const [muted, setMuted] = useState(false)
 
+	const [startX, setStartX] = useState(0)
+	const [startY, setStartY] = useState(0)
+
 	const musicRef = useRef()
 
 	useEffect(() => {
@@ -95,6 +98,73 @@ export default function Tetris() {
 		const interval = setInterval(updateGame, SPEED)
 
 		return () => clearInterval(interval)
+	}, [game])
+
+	useEffect(() => {
+		function handleTouchStart(e) {
+			setStartX(e.touches[0].clientX)
+			setStartY(e.touches[0].clientY)
+		}
+
+		function handleTouchMove(e) {
+			if (!startX || !startY) {
+				return
+			}
+
+			let xUp = e.touches[0].clientX
+			let yUp = e.touches[0].clientY
+
+			let xDiff = startX - xUp
+			let yDiff = startY - yUp
+
+			if (Math.abs(xDiff) > Math.abs(yDiff)) {
+				if (xDiff > 0) {
+					/* left swipe */
+					shiftCurrentPieceLeft()
+				} else {
+					/* right swipe */
+					shiftCurrentPieceRight()
+				}
+			} else {
+				if (yDiff > 0) {
+					/* up swipe */
+					rotateCurrentPieceClockwise()
+				} else {
+					/* down swipe */
+					shiftCurrentPieceDown()
+				}
+			}
+
+			/* reset values */
+			setStartX(null)
+			setStartY(null)
+		}
+
+		window.addEventListener('touchstart', handleTouchStart)
+		window.addEventListener('touchmove', handleTouchMove)
+
+		return () => {
+			window.removeEventListener('touchstart', handleTouchStart)
+			window.removeEventListener('touchmove', handleTouchMove)
+		}
+	}, [game])
+
+	useEffect(() => {
+		function handleTouchStart(e) {
+			musicRef.current.play()
+			musicRef.current.volume = 0.25
+
+			setGame((prev) => ({
+				...prev,
+				status: STATUS.PLAYING,
+			}))
+		}
+
+		window.addEventListener('touchstart', handleTouchStart)
+
+		return () => {
+			window.removeEventListener('touchstart', handleTouchStart)
+		}
 	}, [game])
 
 	useEffect(() => {
@@ -163,8 +233,6 @@ export default function Tetris() {
 				board: INITIAL_BOARD.map((y) => y.map(() => 0)),
 			})
 		} else {
-			console.log(newPiece)
-
 			drawShadow(newBoard, newPiece)
 
 			drawNewPiece(newBoard, newPiece)
@@ -431,7 +499,7 @@ export default function Tetris() {
 			<Canvas style={{ height: '100vh', widows: '100%' }} shadows gl={{ alpha: false, antialias: false }}>
 				<Suspense fallback={'Loading'}>
 					{game.status === STATUS.PLAYING ? (
-						<OrthographicCamera makeDefault position={new THREE.Vector3(0, 0, 30)} zoom={33} />
+						<OrthographicCamera makeDefault position={new THREE.Vector3(0, 0, 30)} zoom={24} />
 					) : (
 						<>
 							<PerspectiveCamera makeDefault position={[0, 0, 6]} fov={75} /> <OrbitControls maxDistance={100} />
@@ -457,7 +525,7 @@ export default function Tetris() {
 
 					<GameHud game={game} muted={muted} />
 
-					<group position={[0, -10.5, -10]}>
+					<group position={[0, -10.5, -20]}>
 						{/* Borders */}
 						<group>
 							{Array(12)
@@ -552,12 +620,12 @@ function GameHud({ game, muted }) {
 					{game.status !== STATUS.PLAYING && (
 						<>
 							{game.status === STATUS.GAMEOVER && (
-								<Text3D position={[-3, 3, -6]} size={1} font='/font.json'>
+								<Text3D position={[-3, 3, -10]} size={1} font='/font.json'>
 									{`Game Over`}
 									<meshPhongMaterial emissive={'#ff00ff'} emissiveIntensity={9} />
 								</Text3D>
 							)}
-							<Text3D position={[-3, 0, -6]} size={1} font='/font.json'>
+							<Text3D position={[-3, 0, -10]} size={1} font='/font.json'>
 								{`Press Enter \n     to Play`}
 								<meshPhongMaterial emissive={'#00ffff'} emissiveIntensity={5} />
 							</Text3D>
